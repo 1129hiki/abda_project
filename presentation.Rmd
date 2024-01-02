@@ -1,0 +1,182 @@
+---
+title: "What makes wine great?"
+author: "Yuga Hikida"
+date: "2024-01-02"
+output: 
+  beamer_presentation:
+  theme: "Boadilla"
+  innertheme: "circles"
+header-includes:
+  - \definecolor{UBCblue}{rgb}{0.04706, 0.13725, 0.26667} % UBC Blue (primary)
+  - \usecolortheme[named=UBCblue]{structure}
+  - \setbeamercolor{frametitle}{fg=white,bg=UBCblue}
+  - \setbeamercolor{titlelike}{parent=structure,fg=UBCblue}
+  - \setbeamertemplate{footline}[page number]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r include = FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+```
+
+```{r include = FALSE}
+fit1 <- readRDS("results/fit1.rds")
+fit2 <- readRDS("results/fit2.rds")
+fit3 <- readRDS("results/fit3.rds")
+```
+
+
+```{r include = FALSE}
+d <- read.csv("data/winequality-white.csv", sep = ";")
+```
+
+## Data: Preditictive variables
+
+```{r}
+df_long <- d %>%
+  select(!quality) %>%
+  tidyr::gather(key = "variable", value = "value")
+
+ggplot(df_long, aes(x = value, fill = variable)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~variable, scale = "free") +
+  theme_minimal() +
+  theme(legend.position = "none", text = element_text(size = 12)) +
+  labs(x = "", y = "", title = "", subtitle = "")
+```
+
+## Data: Response variables (quality)
+
+```{r}
+ggplot(d, aes(x = factor(quality))) +
+  geom_bar(stat = "count", alpha = 0.7) +
+  labs(title = "", x = "", y = "count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 15))
+```
+
+## How to model "quality"?
+
+- $M_1$: Categorical variable. $quality \in \{`1`, ..., `10` \}$
+
+  $\Rightarrow$ Classification
+  
+- $M_2$: Continuous variable. $quality \in \lbrack1, 10 \rbrack$
+ 
+  $\Rightarrow$ Regression
+  
+- $M_3$: Ordered Categorical variable. $quality \in \{1, ..., 10 \}$
+
+  $\Rightarrow$ Ordinal Regression
+
+For following slides, $y$ for $quality$ and $X$ for (vector of) predictive variables.
+
+## $M_1$: Classification (1)
+\[
+\begin{aligned}
+ y &\sim \text{categorical}(\psi_1,...,\psi_C) 
+   &= \prod_{c=1}^{C} \psi_c^{I_{c(y)}}
+\end{aligned}
+\]
+
+where $C$ is the number of categories ($C = 7$ for our case), $\psi_c = Pr(y = c)$ such that $\sum_{c=1}^{C} \psi_c^{I_c(y)} = 1$, and
+
+$$
+ I_{c(y)} =
+    \begin{cases} 
+    1 & y = c \\
+    0 & \text{otherwise}
+    \end{cases}
+$$
+
+## $M_1$: Classification (2)
+For $c = 1,..,C$:
+\[
+\begin{aligned}
+ \psi_c &= \text{softmax}(\eta_c) \\
+  &= \frac{e^{\eta_c}}{\sum_{k=1}^{C} e^{\eta_k}} \\
+ \eta_c &= X_c\beta_c \;\; \text{where}  \;\; X_c = X[y == c] \\
+ \beta_c &\sim \text{Normal}(0, \sigma^2I)
+\end{aligned}
+\]
+
+```{r eval=FALSE, echo = TRUE}
+f <- quality ~ citric.acid + residual.sugar +
+   total.sulfur.dioxide + free.sulfur.dioxide + 
+   chlorides + density + pH + sulphates + alcohol
+
+fit1 <- brm(f, 
+            data = d, 
+            family = categorical(link = "logit"),
+            prior = p1)
+```
+
+
+
+## $M_2$: Regression
+We choose to use Normal distribution but other distribution such as t-distribution can be also chosen.
+
+\[
+\begin{aligned}
+ y &\sim \text{Normal}(\eta, \gamma^2) \\
+ \eta &= x^T\beta \\
+ \beta &\sim \text{Normal}(0, \sigma_\beta^2I) \\
+ \gamma^2 &\sim \text{Half-normal}(0, \sigma_\gamma^2)
+\end{aligned}
+\]
+
+```{r eval=FALSE, echo = TRUE}
+fit2 <- brm(f, 
+            data = d,
+            family = gaussian(),
+            prior = p2)
+```
+
+
+
+## $M_3$: Ordinal Regression: Cumulative Model (1)
+For $c = 1,..,C$: 
+\[
+\begin{aligned}
+ \psi_c &= Pr(y \leq c) - Pr(y \leq c - 1) \\
+ &:= Pr(\tilde{y} \leq \tau_c) - Pr(\tilde{y} \leq \tau_{c - 1}) \\
+ \tilde{y} &= \eta + \epsilon, \; \epsilon \sim \text{Normal}(0, 1) \\
+ \beta &\sim \text{Normal}(0, \sigma^2I) \\
+ \tau_c &\sim \text{Normal}(0, \sigma_{\tau_c}^2)
+\end{aligned}
+\]
+
+## $M_3$: Ordinal Regression: Cumulative Model (2)
+Other expression:
+\[
+\begin{aligned}
+ Pr(\tilde{y} \leq \tau_c)
+ &= Pr(\eta + \epsilon \leq < \tau_c) \\
+ &= Pr(\epsilon \leq \tau_c - \eta)  \\
+ &= \Phi(\tau_c - \eta) \;\; \Phi: \text{cdf of standard normal aka probit}
+\end{aligned}
+\]
+
+Then we have:
+
+\[
+\begin{aligned}
+ \psi_c &= \Phi(\tau_c - \eta) - \Phi(\tau_{c - 1} - \eta) \\
+ &\vdots\\
+\end{aligned}
+\]
+
+```{r eval=FALSE, echo = TRUE}
+fit3 <- brm(f, 
+            data = d,
+            family = cumulative("probit"),
+            prior = p3)
+```
+
+
+

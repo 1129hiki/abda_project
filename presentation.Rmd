@@ -1,6 +1,6 @@
 ---
 title: "What makes wine great?"
-author: "Yuga Hikida"
+author: "Yuga Hikida, Adya Maheshwari"
 date: "2024-01-02"
 output: 
   beamer_presentation:
@@ -22,6 +22,10 @@ knitr::opts_chunk$set(echo = FALSE)
 library(ggplot2)
 library(tidyr)
 library(dplyr)
+library(bayesplot)
+library(brms)
+library(patchwork)
+library(latex2exp)
 ```
 
 ```{r include = FALSE}
@@ -34,6 +38,19 @@ fit3 <- readRDS("results/fit3.rds")
 ```{r include = FALSE}
 d <- read.csv("data/winequality-white.csv", sep = ";")
 ```
+
+## Task
+
+- Prediction of quality of (white) wine (from 1, 2,.. up to 10) using physicochemical variables.
+
+```{r}
+ggplot(d, aes(x = factor(quality))) +
+  geom_bar(stat = "count", alpha = 0.7) +
+  labs(title = "", x = "", y = "count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 15))
+```
+
 
 ## Data: Preditictive variables
 
@@ -50,15 +67,7 @@ ggplot(df_long, aes(x = value, fill = variable)) +
   labs(x = "", y = "", title = "", subtitle = "")
 ```
 
-## Data: Response variables (quality)
 
-```{r}
-ggplot(d, aes(x = factor(quality))) +
-  geom_bar(stat = "count", alpha = 0.7) +
-  labs(title = "", x = "", y = "count") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(size = 15))
-```
 
 ## How to model "quality"?
 
@@ -108,12 +117,40 @@ For $c = 1,..,C$:
 ```{r eval=FALSE, echo = TRUE}
 f <- quality ~ citric.acid + residual.sugar +
    total.sulfur.dioxide + free.sulfur.dioxide + 
-   chlorides + density + pH + sulphates + alcohol
+   chlorides + density + pH + sulphates + alcohol + 
+   fixed.acidity + volatile.acideity
 
 fit1 <- brm(f, 
             data = d, 
             family = categorical(link = "logit"),
             prior = p1)
+```
+
+
+## $M_1$: Result (1)
+
+```{r message = FALSE}
+var_look_1 <- "residual.sugar"
+pl1_1 <- mcmc_areas(fit1, paste("b_mu", 4:9, "_", var_look_1, sep = "")) +
+         scale_y_discrete(labels = paste(4:9)) +
+         labs(y = paste("beta for", var_look_1))
+
+var_look_2 <- "alcohol"
+pl1_2 <- mcmc_areas(fit1, paste("b_mu", 4:9, "_", var_look_2, sep = "")) +
+         scale_y_discrete(labels = paste(4:9)) +
+         labs(y = paste("beta for", var_look_2))
+
+pl1_1 + pl1_2
+```
+
+## $M_1$: Result (2)
+
+```{r include = FALSE}
+pl1_5 <- plot(conditional_effects(fit1, effects = var_look_1, method = "posterior_epred", categorical = TRUE))[[1]]
+pl1_6 <- plot(conditional_effects(fit1, effects = var_look_2, method = "posterior_epred", categorical = TRUE))[[1]]
+```
+```{r}
+(pl1_5 + theme(legend.position = "none")) + pl1_6
 ```
 
 
@@ -137,6 +174,22 @@ fit2 <- brm(f,
             prior = p2)
 ```
 
+## $M_2$: Result (1) ##
+```{r message = FALSE}
+pl2_3 <- mcmc_areas(fit2, "b_residual.sugar") + scale_y_discrete(labels = "") + labs(title = "residual.sugar")
+pl2_4 <- mcmc_areas(fit2, "b_alcohol") + scale_y_discrete(labels = "") + labs(title = "alcohol")
+pl2_3 / pl2_4
+```
+
+## $M_2$: Result (2) ##
+```{r include = FALSE}
+pl2_1 <- plot(conditional_effects(fit2, "residual.sugar", method = "posterior_epred"))[[1]]
+pl2_2 <- plot(conditional_effects(fit2, "residual.sugar", method = "posterior_predict"))[[1]]
+```
+```{r}
+(pl2_1 + labs(title = "Expected value")) / pl2_2 + labs(title = "PP draws")
+```
+
 
 
 ## $M_3$: Ordinal Regression: Cumulative Model (1)
@@ -156,7 +209,7 @@ Other expression:
 \[
 \begin{aligned}
  Pr(\tilde{y} \leq \tau_c)
- &= Pr(\eta + \epsilon \leq < \tau_c) \\
+ &= Pr(\eta + \epsilon \leq \tau_c) \\
  &= Pr(\epsilon \leq \tau_c - \eta)  \\
  &= \Phi(\tau_c - \eta) \;\; \Phi: \text{cdf of standard normal aka probit}
 \end{aligned}
@@ -177,6 +230,44 @@ fit3 <- brm(f,
             family = cumulative("probit"),
             prior = p3)
 ```
+
+
+## $M_3$: Result
+
+```{r include = FALSE}
+pl3_1 <- plot(conditional_effects(fit3, effects = "alcohol", categorical = TRUE, plot = FALSE))[[1]]
+pl3_2 <- plot(conditional_effects(fit3, effects = "alcohol", method = "posterior_linpred", plot = FALSE))[[1]]
+```
+
+```{r}
+pl3_1 + (pl3_2 + labs(y = TeX(r"(\tilde{y})")))
+```
+
+## Model Comparison
+
+leave-one-out CV
+```{r warning=FALSE, message=FALSE, echo = TRUE, comment = ""}
+loo_compare(fit1, fit2, fit3)
+```
+
+Posterior Model Probability
+```{r warning=FALSE, message=FALSE, echo = TRUE, comment = "", results = FALSE}
+pmp <- post_prob(fit1, fit2, fit3)
+```
+
+```{r, comment = ""}
+pmp
+```
+
+
+
+## Partial Pooling
+- Adding data of red wine and do partial pooling.
+- 
+
+## Adding non-linearity
+
+
 
 
 

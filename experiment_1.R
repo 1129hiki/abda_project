@@ -14,8 +14,10 @@ library(parallel)
 d <- read.csv("data/winequality-white.csv", sep = ";")
 
 ############### M1 (categorical classification) ############### 
-f <- quality ~ citric.acid + residual.sugar + chlorides + free.sulfur.dioxide + 
-  total.sulfur.dioxide + density + pH + sulphates + alcohol
+f <- quality ~ citric.acid + residual.sugar +
+  total.sulfur.dioxide + free.sulfur.dioxide + 
+  chlorides + density + pH + sulphates + alcohol +
+  fixed.acidity + volatile.acidity
 p1 <- prior(normal(0, 5), class = "b", dpar = "mu4") + 
   prior(normal(0, 5), class = "b", dpar = "mu5") + 
   prior(normal(0, 5), class = "b", dpar = "mu6") + 
@@ -77,6 +79,6 @@ loo_compare(fit1, fit2, fit3)
 post_prob(fit1, fit2, fit3)
 
 
-# saveRDS(fit1, "results/fit1.rds")
-# saveRDS(fit2, "results/fit2.rds")
-# saveRDS(fit3, "results/fit3.rds")
+saveRDS(fit1, "results/fit1.rds")
+saveRDS(fit2, "results/fit2.rds")
+saveRDS(fit3, "results/fit3.rds")

@@ -12,7 +12,7 @@ header-includes:
   - \usecolortheme[named=UBCblue]{structure}
   - \setbeamercolor{frametitle}{fg=white,bg=UBCblue}
   - \setbeamercolor{titlelike}{parent=structure,fg=UBCblue}
-  - \setbeamertemplate{footline}[page number]
+  - \setbeamertemplate {footline}{\quad\hfill\insertframenumber\strut\quad}
 ---
 
 ```{r setup, include=FALSE}
@@ -523,6 +523,7 @@ loo_compare(linear_reg, cumlat, cumlat_s)
 Yuga Hikida: yuga.hikida@tu-dortmund.de
 
 Adya Maheshwari: adya.maheshwari@tu-dortmund.de
+
 
 # Appendix
 ## Summary: Regression

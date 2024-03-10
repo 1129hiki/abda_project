@@ -1,7 +1,7 @@
 ---
 title: "What makes wine great?"
 subtitle: "TU Dortmund University | Applied Bayesian Data Analysis | Prof. Dr. Bürkner, Prof. Dr. Ickstadt"
-author: "Yuga Hikida"
+author: "Yuga Hikida, Adya Maheshwari"
 date: 2024-03-17
 date-format: iso
 

@@ -116,7 +116,7 @@ Depending on the choice of likelihood, we can model the response variable in thr
 
 The introductory paper of the data [@misc_wine_quality_186] focuses on the first approach where they built classification model using Support Vector Machine. Since we would like to retain ordered structure of data for interpretation, we use second and third approach. More precisely, we estimate Bayesian linear regression model for the second approach and Bayesian ordinal regression model for the third approach.
 
-All the estimations are conducted using {R} package \textbf{brms} [@brms_1]. The package allows us to estimate Bayesian regression based model flexibly and efficiently by MCMC sampling method called Hamilton Monte Carlo using {Stan} [@carpenter2017stan] in backend.
+All the estimations are conducted using R package \textbf{brms} [@brms_1]. The package allows us to estimate Bayesian regression based model flexibly and efficiently by MCMC sampling method called Hamilton Monte Carlo using Stan [@carpenter2017stan] in backend.
 
 Replication code for our analysis is available at [https://github.com/1129hiki/abda_project](https://github.com/1129hiki/abda_project).
 
@@ -156,7 +156,7 @@ linear_reg <- brm(f,
 ```
 \normalsize
 
-where `f` specifies formula for linear regression, `family = gaussian()` specifies Gaussain likelihood with identity link, and `p_linear_reg` is a {R} vector containing prior specifications, which we will discuss in the next subsection. The `chains`, `iter`, and `warmup`, relating to sampling from posterior distribution, specify number of Markov chains, number of iteration per chain, and number of samples thrown away before start saving samples to avoid sampling from non-stationary part of the chain respectively. Lastly, we save all the posterior samples with `save_pars = save_pars(all=TRUE)` since we will use them for further analysis later.
+where `f` specifies formula for linear regression, `family = gaussian()` specifies Gaussain likelihood with identity link, and `p_linear_reg` is a R vector containing prior specifications, which we will discuss in the next subsection. The `chains`, `iter`, and `warmup`, relating to sampling from posterior distribution, specify number of Markov chains, number of iteration per chain, and number of samples thrown away before start saving samples to avoid sampling from non-stationary part of the chain respectively. Lastly, we save all the posterior samples with `save_pars = save_pars(all=TRUE)` since we will use them for further analysis later.
 
 
 ### Prior specification
@@ -307,7 +307,7 @@ If this does not hold, we get negative probability $Pr(y = c) < 0$. This can be 
 \end{math}
 \end{center}
 
-Every time $\tilde{\tau}_c$ are sampled, we need to apply this transformation to obtain $\tau_c$ which will be then stored as posterior samples. Using \textbf{Stan}, this can be done by declaring the thresholds as ordered vector.
+Every time $\tilde{\tau}_c$ are sampled, we need to apply this transformation to obtain $\tau_c$ which will be then stored as posterior samples. Using Stan, this can be done by declaring the thresholds as ordered vector.
 
 ```{r eval=FALSE, echo = TRUE}
 parameters {
@@ -316,7 +316,7 @@ parameters {
 }
 ```
 
-This is done in {Stan} code created by \textbf{brms}.
+This is done in Stan code created by \textbf{brms}.
 
 ### Result
 The result for cumulative model is shown in @fig-cumres. We again focus on the two variables. The left column shows the conditional effect of each variables on $\tilde{y}$. It can be seen that the effects are similar to the one from linear regression. The right column shows the conditional effects on the probability of each qualities. For $alcohol$, since it has positive effect, larger $alcohol$ corresponds to higher probability for higher $quality$ such as $8$ and $9$ compare to smaller $alcohol$. We also see the opposite (e.g. 8\% $alcohol$ corresponds to high probability for  $quality$ 3 to 5). For $citric.acid$, the conditional probabilities are flatter since the effect is limited.
@@ -431,7 +431,7 @@ pl_zero_2 <- mcmc_areas(cumlat, pars = c("b_residual.sugar", "b_total.sulfur.dio
 
 ```{r}
 #| label: fig-post-small
-#| fig-cap: "Posterior distribution of *b_residual.sugar* and *b_total.sulfur.dioxide*."
+#| fig-cap: "Posterior distribution of coefficients for *residual.sugar* and *total.sulfur.dioxide*."
 pl_zero_1 + labs(title = "Linear Regression") + pl_zero_2 + labs(title = "Cumulative model")
 ```
 

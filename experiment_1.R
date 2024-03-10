@@ -16,6 +16,119 @@ library(cmdstanr)
 d <- read.csv("data/winequality-white.csv", sep = ";")
 attach(d)
 
+############### MODEL USED FOR REPORT ############### 
+###############  short version (more interpretable) ###############
+###############  linear regression ############### 
+
+f_short <- quality ~ citric.acid + volatile.acidity + residual.sugar + sulphates + chlorides + total.sulfur.dioxide + alcohol
+
+p10 <- prior("normal(0,0.36)", class = "b", coef = "alcohol") +
+  prior("normal(0,20.268)", class = "b", coef = "chlorides") +
+  prior("normal(0,3.659)", class = "b", coef = "citric.acid") +
+  prior("normal(0,0.087)", class = "b", coef = "residual.sugar") +
+  prior("normal(0,3.88)", class = "b", coef = "sulphates") +
+  prior("normal(0,0.01)", class = "b", coef = "total.sulfur.dioxide") +
+  prior("normal(0,4.393)", class = "b", coef = "volatile.acidity") +
+  prior(normal(6, 5), class = "Intercept") +
+  prior(normal(0, 5), class = "sigma")
+
+fit10 <- brm(f_short,
+             data = d,
+             prior = p10,
+             save_pars = save_pars(all=TRUE),
+             iter = 4000,
+             chains = 4,
+             cores = 4)
+
+fit10 <- add_criterion(fit10, "loo", ndraws = 4000)
+
+saveRDS(fit10, "results/short_liner_reg.rds")
+
+###############  cumulative model ############### 
+
+p7 <- prior("normal(0, 4.132)", class = "b", coef = "citric.acid") +
+  prior("normal(0,0.099)", class = "b", coef = "residual.sugar") +
+  prior("normal(0,3.88)", class = "b", coef = "sulphates") +
+  prior("normal(0,22.885)", class = "b", coef = "chlorides") +
+  prior("normal(0,0.012)", class = "b", coef = "total.sulfur.dioxide") +
+  prior("normal(0,0.406)", class = "b", coef = "alcohol") +
+  prior("normal(0,4.961)", class = "b", coef = "volatile.acidity") +
+  prior(normal(-2, 1), class = "Intercept", coef = "1") +
+  prior(normal(-1.43, 1), class = "Intercept", coef = "2") +
+  prior(normal(-0.86, 1), class = "Intercept", coef = "3") +
+  prior(normal(-0.29, 1), class = "Intercept", coef = "4") +
+  prior(normal(0.29, 1), class = "Intercept", coef = "5") +
+  prior(normal(0.86, 1), class = "Intercept", coef = "6") +
+  prior(normal(1.43, 1), class = "Intercept", coef = "7") +
+  prior(normal(2, 1), class = "Intercept", coef = "8")
+
+
+fit7 <- brm(f_short,
+            data = d,
+            family = cumulative("probit"),
+            prior = p7,
+            init = 0,
+            save_pars = save_pars(all=TRUE),
+            chains = 4,
+            cores = 4,
+            iter = 4000)
+
+
+plot(conditional_effects(fit8, effects = "residual.sugar", categorical = TRUE, plot = FALSE))[[1]]
+plot(conditional_effects(fit8, effects = "residual.sugar", method = "posterior_linpred", plot = FALSE))[[1]]
+plot(conditional_effects(fit8, effects = "total.sulfur.dioxide", method = "posterior_linpred", plot = FALSE))[[1]]
+
+linear_reg <- readRDS("results/short_liner_reg.rds")
+cumlat <- readRDS("results/short_cumulative.rds")
+cumlat_s <- readRDS("results/short_cumulative_with_spline.rds")
+
+bmc_obj <- metabmc::metabmc(linear_reg, cumlat, cumlat_s)
+
+###############  cumulative model with spline ############### 
+
+p8 <- prior("normal(0, 4.132)", class = "b", coef = "citric.acid") +
+  prior("normal(0,3.88)", class = "b", coef = "sulphates") +
+  prior("normal(0,22.885)", class = "b", coef = "chlorides") +
+  prior("normal(0,0.406)", class = "b", coef = "alcohol") +
+  prior("normal(0,4.961)", class = "b", coef = "volatile.acidity") +
+  prior("normal(0, 3)", class = "b", coef = "sresidual.sugar_1") +
+  prior("normal(0, 3)", class = "b", coef = "stotal.sulfur.dioxide_1") +
+  prior(normal(-2, 1), class = "Intercept", coef = "1") +
+  prior(normal(-1.43, 1), class = "Intercept", coef = "2") +
+  prior(normal(-0.86, 1), class = "Intercept", coef = "3") +
+  prior(normal(-0.29, 1), class = "Intercept", coef = "4") +
+  prior(normal(0.29, 1), class = "Intercept", coef = "5") +
+  prior(normal(0.86, 1), class = "Intercept", coef = "6") +
+  prior(normal(1.43, 1), class = "Intercept", coef = "7") +
+  prior(normal(2, 1), class = "Intercept", coef = "8")
+
+
+f_short_s <- quality ~ s(residual.sugar) + s(total.sulfur.dioxide) + citric.acid + volatile.acidity + sulphates + chlorides + alcohol
+
+fit8 <- brm(f_short_s,
+            data = d,
+            family = cumulative("probit"),
+            prior = p8,
+            init = 0,
+            save_pars = save_pars(all=TRUE),
+            iter = 4000,
+            chains = 4,
+            cores = 4)
+
+fit7 <- add_criterion(fit7, "loo", ndraws = 4000)
+fit8 <- add_criterion(fit8, "loo", ndraws = 4000)
+
+saveRDS(fit7, "results/short_cumulative.rds")
+saveRDS(fit8, "results/short_cumulative_with_spline.rds")
+
+
+
+make_prior_string <- function(x, tau = 0.5, sd_y =  sd(quality)){
+  return (paste("normal(0,", round(tau*sd_y/sd(x), digits = 3), ")", sep = ""))
+}
+###############  NOT USED FOR REPORT ###############
+
+
 f <- quality ~ citric.acid + residual.sugar +
   total.sulfur.dioxide + free.sulfur.dioxide + 
   chlorides + density + pH + sulphates + alcohol + 
@@ -40,6 +153,7 @@ fit1 <- brm(f,
             family = categorical(link = "logit"),
             prior = p1,
             iter = 10000,
+            chains = 4,
             save_pars = save_pars(all = TRUE),
             cores = 4)
 
@@ -204,81 +318,6 @@ fit3_tmp <- fit3
 fit3 <- readRDS("results/fit3.rds")
 saveRDS(fit3_tmp, "results/fit3_tmp.rds")
 
-###############  short version (more interpretable) ###############
-
-###############  cumulative model ############### 
-
-p7 <- prior("normal(0, 4.132)", class = "b", coef = "citric.acid") +
-      prior("normal(0,0.099)", class = "b", coef = "residual.sugar") +
-      prior("normal(0,3.88)", class = "b", coef = "sulphates") +
-      prior("normal(0,22.885)", class = "b", coef = "chlorides") +
-      prior("normal(0,0.012)", class = "b", coef = "total.sulfur.dioxide") +
-      prior("normal(0,0.406)", class = "b", coef = "alcohol") +
-      prior("normal(0,4.961)", class = "b", coef = "volatile.acidity") +
-      prior(normal(-2, 1), class = "Intercept", coef = "1") +
-      prior(normal(-1.43, 1), class = "Intercept", coef = "2") +
-      prior(normal(-0.86, 1), class = "Intercept", coef = "3") +
-      prior(normal(-0.29, 1), class = "Intercept", coef = "4") +
-      prior(normal(0.29, 1), class = "Intercept", coef = "5") +
-      prior(normal(0.86, 1), class = "Intercept", coef = "6") +
-      prior(normal(1.43, 1), class = "Intercept", coef = "7") +
-      prior(normal(2, 1), class = "Intercept", coef = "8")
-      
-
-
-f_short <- quality ~ citric.acid + volatile.acidity + residual.sugar + sulphates + chlorides + total.sulfur.dioxide + alcohol
-
-fit7 <- brm(f_short,
-            data = d,
-            family = cumulative("probit"),
-            prior = p7,
-            init = 0,
-            save_pars = save_pars(all=TRUE),
-            chains = 4,
-            cores = 4,
-            iter = 4000)
-
-
-plot(conditional_effects(fit8, effects = "residual.sugar", categorical = TRUE, plot = FALSE))[[1]]
-plot(conditional_effects(fit8, effects = "residual.sugar", method = "posterior_linpred", plot = FALSE))[[1]]
-plot(conditional_effects(fit8, effects = "total.sulfur.dioxide", method = "posterior_linpred", plot = FALSE))[[1]]
-
-###############  cumulative model with spline ############### 
-
-p8 <- prior("normal(0, 4.132)", class = "b", coef = "citric.acid") +
-      prior("normal(0,3.88)", class = "b", coef = "sulphates") +
-      prior("normal(0,22.885)", class = "b", coef = "chlorides") +
-      prior("normal(0,0.406)", class = "b", coef = "alcohol") +
-      prior("normal(0,4.961)", class = "b", coef = "volatile.acidity") +
-      prior("normal(0, 3)", class = "b", coef = "sresidual.sugar_1") +
-      prior("normal(0, 3)", class = "b", coef = "stotal.sulfur.dioxide_1") +
-      prior(normal(-2, 1), class = "Intercept", coef = "1") +
-      prior(normal(-1.43, 1), class = "Intercept", coef = "2") +
-      prior(normal(-0.86, 1), class = "Intercept", coef = "3") +
-      prior(normal(-0.29, 1), class = "Intercept", coef = "4") +
-      prior(normal(0.29, 1), class = "Intercept", coef = "5") +
-      prior(normal(0.86, 1), class = "Intercept", coef = "6") +
-      prior(normal(1.43, 1), class = "Intercept", coef = "7") +
-      prior(normal(2, 1), class = "Intercept", coef = "8")
-
-
-f_short_s <- quality ~ s(residual.sugar) + s(total.sulfur.dioxide) + citric.acid + volatile.acidity + sulphates + chlorides + alcohol
-
-fit8 <- brm(f_short_s,
-            data = d,
-            family = cumulative("probit"),
-            prior = p8,
-            init = 0,
-            save_pars = save_pars(all=TRUE),
-            iter = 4000,
-            chains = 4,
-            cores = 4)
-
-fit7 <- add_criterion(fit7, "loo", ndraws = 4000)
-fit8 <- add_criterion(fit8, "loo", ndraws = 4000)
-
-saveRDS(fit7, "results/short_cumulative.rds")
-saveRDS(fit8, "results/short_cumulative_with_spline.rds")
 
 
 
@@ -305,27 +344,5 @@ fit9 <- brm(f_cat,
             warmup = 2000,
             iter = 10000)
 
-###############  linear regression ############### 
 
-p10 <- prior("normal(0,0.36)", class = "b", coef = "alcohol") +
-      prior("normal(0,20.268)", class = "b", coef = "chlorides") +
-      prior("normal(0,3.659)", class = "b", coef = "citric.acid") +
-      prior("normal(0,0.087)", class = "b", coef = "residual.sugar") +
-      prior("normal(0,3.88)", class = "b", coef = "sulphates") +
-      prior("normal(0,0.01)", class = "b", coef = "total.sulfur.dioxide") +
-      prior("normal(0,4.393)", class = "b", coef = "volatile.acidity") +
-      prior(normal(6, 5), class = "Intercept") +
-      prior(normal(0, 5), class = "sigma")
-
-fit10 <- brm(f_short,
-            data = d,
-            prior = p10,
-            save_pars = save_pars(all=TRUE),
-            iter = 4000,
-            chains = 4,
-            cores = 4)
-
-fit10 <- add_criterion(fit10, "loo", ndraws = 4000)
-
-saveRDS(fit10, "results/short_liner_reg.rds")
 

@@ -1,0 +1,576 @@
+---
+title: "What makes wine great?"
+subtitle: "TU Dortmund University | Applied Bayesian Data Analysis | Prof. Dr. Bürkner, Prof. Dr. Ickstadt"
+author: "Yuga Hikida"
+date: 2024-03-17
+date-format: iso
+
+bibliography: references.bib
+format:
+  pdf:
+    number-sections: true
+    colorlinks: true
+    papersize: a4
+    fontsize: 12px
+    geometry:
+      - top=25mm
+      - left=25mm
+      - right=25mm
+engine: knitr
+knitr:
+  opts_chunk: 
+    R.options:
+      width: 240
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r include = FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(bayesplot)
+library(brms)
+library(patchwork)
+library(latex2exp)
+```
+
+```{r include = FALSE}
+theme_set(theme_minimal() +
+theme(axis.text = element_text(size=8),
+      axis.title = element_text(size = 10),
+      legend.title = element_text(size=10),
+      legend.text = element_text(size = 8),
+      strip.text = element_text(size=10),
+      plot.title = element_text(size = 10),
+      legend.key.size = unit(0.4, 'cm')
+      ))
+```
+
+```{r include = FALSE}
+linear_reg <- readRDS("results/short_liner_reg.rds")
+cumlat <- readRDS("results/short_cumulative.rds")
+cumlat_s <- readRDS("results/short_cumulative_with_spline.rds")
+```
+
+
+```{r include = FALSE}
+d <- read.csv("data/winequality-white.csv", sep = ";")
+```
+
+## Introduction
+
+In this report, we construct Bayesian predictive model for quality of white wines using physicochemical variables. The main aim of our analysis are to 1. understand how each variables affect the quality and 2. evaluate suitable likelihood through comparison of predictive performance of models.
+
+## Data
+
+The data is obtained from [@misc_wine_quality_186]. It contains the quality of red and white wines which takes values from 1, 2 up to 10 (10 is the best quality), of which we only focus on the data for wine wines for this report (4898 observations). The histogram of quality is shown in @fig-res. It can be seen that mass concentrate in $5$ and $6$, and none of the wine receives the quality $1$, $2$ nor $10$. 
+
+```{r fig.width=3, fig.height = 2}
+#| label: fig-res
+#| fig-cap: "Histogram of response (quality)"
+ggplot(d, aes(x = factor(quality))) +
+  geom_bar(stat = "count", alpha = 0.7) +
+  labs(title = "", x = "", y = "count")
+```
+
+We construct Bayesian model to predict quality of wine using following $7$ physicochemical variables shown in @tbl-pred as predictors. We also give some interpretations of each variables for intuition.
+
+\footnotesize
+| Interpretations | Name of variable(s) |
+|-------------------------------|---------------------------------|
+| Acidity                          | citric.acid, volatile.acidity    |
+| Sweetness                        | residual.sugar                   |
+| Bitterness                       | sulphates                        |
+| Saltiness                        | chlorides                        |
+| Prevent oxidation and bacteria   | total.sulfur.dioxide             |
+| Literally interpretable          | alcohol                          |
+: Description of predictive variables {#tbl-pred}
+
+
+\normalsize
+The histogram of predictive variables are shown in @fig-pred. All the variables are continuous and the scale of predictive variables differs notably.
+
+```{r}
+#| label: fig-pred
+#| fig-cap: "Histogram of predictive variables"
+df_long <- d %>%
+  select(citric.acid, volatile.acidity, residual.sugar, sulphates, chlorides, total.sulfur.dioxide, alcohol) %>%
+  tidyr::gather(key = "variable", value = "value")
+
+ggplot(df_long, aes(x = value, fill = variable)) +
+  geom_histogram(alpha = 0.5, bins=20) +
+  facet_wrap(~variable, scale = "free") +
+  labs(x = "", y = "", title = "", subtitle = "") +
+  theme(legend.position = "none")
+```
+## Methodology
+
+Depending on the choice of likelihood, we can model the response variable in three ways.
+
+1. Categorical variable, $quality \in \{\text{"}1\text{"}, ..., \text{"}10\text{"}\}$
+2. Continuous (metric) variable, $quality \in \mathbb{R}$
+3. Ordinal variable, $quality \in \{1, ..., 10 \}$
+
+The introductory paper of the data [@misc_wine_quality_186] focuses on the first approach where they built classification model using Support Vector Machine. Since we would like to retain ordered structure of data for interpretation, we use second and third approach. More precisely, we estimate Bayesian linear regression model for the second approach and Bayesian ordinal regression model for the third approach.
+
+All the estimations are conducted using {R} package \textbf{brms} [@brms_1]. The package allows us to estimate Bayesian regression based model flexibly and efficiently by MCMC sampling method called Hamilton Monte Carlo using {Stan} [@carpenter2017stan] in backend.
+
+Replication code for our analysis is available at [https://github.com/1129hiki/abda_project](https://github.com/1129hiki/abda_project).
+
+## Linear Regression
+
+Firstly, we estimate linear regression model, which is arguably the simplest model when we have response and predictive variables. Hence, we estimate it as a baseline model. The model can be written as
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+ y_i &\sim \text{normal}(\eta_i, \gamma) \\
+ \eta &= x_i^T\beta \\
+ \beta_j &\sim \text{normal}(0, \sigma_{\beta_j}) \\
+ \gamma &\sim \text{half-normal}(0, \sigma_\gamma)
+\end{aligned}
+\end{math}
+\end{center}
+
+where $y_i$ is $quality$ and $x_i$ is a vector of predictive variables for wine $i$. We use Gaussian likelihood even though we could choose other likelihood such as $t$ distribution. One of our justification for the use of Gaussian likelihood is the central limit theorem which states that sum of large number of variables are approximately Gaussian. The $\beta_j$ is the coefficient of linear regression for each predictive variables. Hence we have $j = 1,...,8$ including intercept and $\beta = [\beta_1,...,\beta_8]^T$. The third line indicates the prior distribution for the coefficients, which we set separately for each coefficients so that we can incorporate difference in scale and/or informativeness into the priors.
+
+Using \textbf{brms}, the model can be estimated by following code
+
+\footnotesize
+```{r eval=FALSE, echo = TRUE, fig.width=2, fig.height=2}
+f <- quality ~ citric.acid + volatile.acidity + 
+     residual.sugar + sulphates + chlorides + 
+     total.sulfur.dioxide + alcohol
+
+linear_reg <- brm(f, 
+              data = d,
+              family = gaussian(),
+              prior = p_linear_reg,
+              chains = 4,
+              iter = 4000,
+              warmup = 2000,
+              save_pars = save_pars(all=TRUE))
+```
+\normalsize
+
+where `f` specifies formula for linear regression, `family = gaussian()` specifies Gaussain likelihood with identity link, and `p_linear_reg` is a {R} vector containing prior specifications, which we will discuss in the next subsection. The `chains`, `iter`, and `warmup`, relating to sampling from posterior distribution, specify number of Markov chains, number of iteration per chain, and number of samples thrown away before start saving samples to avoid sampling from non-stationary part of the chain respectively. Lastly, we save all the posterior samples with `save_pars = save_pars(all=TRUE)` since we will use them for further analysis later.
+
+
+### Prior specification
+
+For prior specification, we focus on the variable $alcohol$. As it can be seen in @fig-prior, $alcohol$ takes the value from $8\%$ to $14\%$ (the range is $6\%$), and $quality$ takes value from $3$ to $9$ (the range is $6$ as well). Following one of the principles for prior specification discussed in [@penal_prior], we assume the simplest model where none of the other variables have predictive power and hence corresponding coefficients takes zero. Then we expect absolute value of $\beta_{alcohol}$ to be smaller than $1$ since we would not have $quality = 0$ nor $quality = 11$. We reflect this information with the prior $\beta_{alcohol} \sim \text{normal}(0, 0.36)$ such that density outside $\pm 1$ is small. Note that we set the mean to be zero since we have no knowledge about the effect of $alcohol$ on $quality$ upon estimation of model.
+
+```{r include = FALSE}
+pl_resp <- ggplot(d, aes(x = factor(quality))) +
+          geom_bar(stat = "count", alpha = 0.7) +
+          labs(title = "", x = "", y = "count") +
+          ggtitle("quality")
+
+pl_alc <- ggplot(d, aes(x = (alcohol))) +
+          geom_histogram(alpha = 0.7, color = "black", fill = "lightpink2", bins=20) +
+          labs(title = "", x = "", y = "") +
+          ggtitle("alcohol")
+
+pl_prior_val <- dnorm(seq(-2, 2, length.out=100), 0, 0.36)
+d_prior <-data.frame(beta = seq(-2, 2, length.out=100), density =  pl_prior_val)
+
+pl_prior <- ggplot(d_prior, aes(x = beta, y = density)) +
+            geom_line() +
+            geom_area(fill = "lightblue", alpha = 0.7) +
+            labs(title = "prior", x = "")
+```
+
+```{r fig.width=6, fig.height=2}
+#| label: fig-prior
+#| fig-cap: "Distribution of (response / predictive) variables and prior distribution."
+(pl_resp + pl_alc + pl_prior)
+```
+
+We can express prior for $\beta_{alcohol}$ as
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+ \beta_{alcohol} &\sim \text{normal}(0, 0.36) \\
+                 &:= \text{normal}(0, \alpha SD(y)/SD(\text{alcohol}))
+\end{aligned}
+\end{math}
+\end{center}
+
+where $SD(\cdot)$ denotes standard deviation. We now get scale free informativeness parameter for the prior which is calculated as $\alpha \approx 0.5$. This can be used for prior specification for other coefficients such that we set same informativeness for all the coefficients. In particular, we set the priors as
+
+$$\beta_j \sim \text{normal}(0, \alpha SD(y)/SD(x_j))$$.
+
+### Result
+
+For our report, we mainly focus on two predictive variables $alcohol$ and $citric.acid$. The results are shown in @fig-lmres. The model is fitted without any convergence issue as shown by a trace plot and R-hat (see Appendix). The left column shows the posterior distribution of the coefficients corresponding to the two variables. The blue line is the median of the posterior and shadowed area indicates $50\%$ credible interval centered around its median. It can be seen that $1\%$ increase in $alcohol$ is expected to lead around $0.35$ to $0.4$ unit increase in $quality$, while $1 g/L$ increase in $citric.acid$ is expected to lead around $-0.4$ to $0$ unit increase (decrease) in $quality$. The right column shows posterior distribution of conditional effect of each predictive variable with other variables fixed at their mean. The shadoewd area shows $95\%$ credible interval. It can be seen that there is strong linear relationship between $alcohol$ and $critic.acid$ while the effect of $citric.acid$ is limited which is implied by the size of coefficient and its uncertainty.
+
+```{r include = FALSE}
+pl_mcmc_1 <- mcmc_areas(linear_reg, pars = c("b_alcohol")) + labs(title = "Posterior distribution")
+pl_mcmc_2 <- mcmc_areas(linear_reg, pars = c("b_citric.acid"))
+pl_lr_1 <- plot(conditional_effects(linear_reg, "alcohol", method = "posterior_epred"))[[1]] +  labs(title = "Conditional effect")
+pl_lr_2 <- plot(conditional_effects(linear_reg, "citric.acid", method = "posterior_epred"))[[1]]
+```
+
+```{r}
+#| label: fig-lmres
+#| fig-cap: "Result for linear regression (only for alcohol and citric.acid)"
+(pl_mcmc_1 + pl_lr_1) / (pl_mcmc_2 + pl_lr_2)
+```
+
+## Ordinal Regression
+
+Now we move on to an ordinal regression model. The discussion here will be based on [@ordinal_paul]. In particular, we will use ordinal regression model called cumulative model. In cumulative model, we consider continuous latent variable $\tilde{y}$ which determine the quality $y$ through thresholds $\tau_c$. The model can be expressed as follow.
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+\text{For $c = 2,..,C-1$:}\\
+Pr(y = c) &= Pr(y \leq c) - Pr(y \leq c - 1) \\
+ &:= Pr(\tilde{y} \leq \tau_c) - Pr(\tilde{y} \leq \tau_{c - 1})
+ \\
+  \tilde{y} &= \eta + \epsilon, \; \epsilon \sim \text{normal}(0, 1) \\
+\end{aligned}
+\end{math}
+\end{center}
+
+In cumulative model, probabilities for each categories $c$ is defined as probability that latent variable $\tilde{y}$ takes the value between $\tau_{c - 1}$ and $\tau_c$ or $Pr(\tau_{c - 1} < \tilde{y}\leq \tau_c)$. We then model $\tilde{y}$ with the linear predictor $\eta$ which remains same as linear regression model, and noise term which we assume to be standard normal. This also defines the distribution of $\tilde{y}$ to be normal.
+
+We can also express $Pr(\tilde{y} \leq \tau_c)$ as
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+ Pr(\tilde{y} \leq \tau_c)
+ &= Pr(\eta + \epsilon \leq \tau_c) \\
+ &= Pr(\epsilon \leq \tau_c - \eta)  \\
+ &= \Phi(\tau_c - \eta) \;\; 
+\end{aligned}
+\end{math}
+\end{center}
+
+where $\Phi$ is a cumulative distribution function of standard normal also known as Probit. This lead to a simpler expression for the probability without $\tilde{y}$ as
+
+$$
+Pr(y = c) = \Phi(\tau_c - \eta) - \Phi(\tau_{c - 1} - \eta)
+$$
+
+Note that for $c=1$ and $c=C$, we have
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+ Pr(y = 1) &= \Phi(\tau_1 - \eta)  \\
+ Pr(y = C) &= 1 - \Phi(\tau_{C-1} - \eta)\\
+\end{aligned}
+\end{math}
+\end{center}
+
+Using \textbf{brms}, the model can be estimated as follow.
+
+\footnotesize
+```{r eval=FALSE, echo = TRUE}
+cumlat <- brm(f, 
+            data = d,
+            family = cumulative("probit"),
+            prior = p_cumlat)
+```
+\normalsize
+
+We specify cumulative model with `family = cumulative()` with link function `"probit"` which corresponds to normal likelihood for $\tilde{y}$.
+
+We set prior in a same way as linear regression assuming the simplest model where linear predictor $\eta$ does not exist and hence $SD(\tilde{y}) = 1$. As discussed in [@ordinal_paul], assuming ordinal variable as a metric variable (as in liner regression) would cause problems such as distortion in size of coefficients. Hence we expect cumulative model to perform better, which we will evaluate in further analysis later.
+
+Note that we could also consider category specific effect where effect of predictive variables differs across categories (e.g. $alcohol$ being important factor for lower $quality$ but not for higher $quality$). However, we do not take this approach for our analysis given small number of data for some of the categories (especially for $quality = 3, 9$).
+
+### Sampling strategy for thresholds
+
+By the construction of cumulative model, we have constraint on the thresholds
+
+$$
+\tau_1 < \tau_2 < \dots < \tau_{C-1}.
+$$
+If this does not hold, we get negative probability $Pr(y = c) < 0$. This can be avoided by introducing unconstrained thresholds $\tilde{\tau}_c$, and define the (constrained) thresholds as
+
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+\tau_c = \begin{cases}
+\tilde{\tau}_1 & \text{if} ~ c = 1 \\
+\tau_{c-1} + \text{exp}(\tilde{\tau}_c) & \text{if} ~ 1 < c \leq C-1.
+\end{cases}
+\end{aligned}
+\end{math}
+\end{center}
+
+Every time $\tilde{\tau}_c$ are sampled, we need to apply this transformation to obtain $\tau_c$ which will be then stored as posterior samples. Using \textbf{Stan}, this can be done by declaring the thresholds as ordered vector.
+
+```{r eval=FALSE, echo = TRUE}
+parameters {
+  ...
+  ordered[nthres] thresholds;
+}
+```
+
+This is done in {Stan} code created by \textbf{brms}.
+
+### Result
+The result for cumulative model is shown in @fig-cumres. We again focus on the two variables. The left column shows the conditional effect of each variables on $\tilde{y}$. It can be seen that the effects are similar to the one from linear regression. The right column shows the conditional effects on the probability of each qualities. For $alcohol$, since it has positive effect, larger $alcohol$ corresponds to higher probability for higher $quality$ such as $8$ and $9$ compare to smaller $alcohol$. We also see the opposite (e.g. 8\% $alcohol$ corresponds to high probability for  $quality$ 3 to 5). For $citric.acid$, the conditional probabilities are flatter since the effect is limited.
+
+```{r include = FALSE}
+pl_cum_1 <- plot(conditional_effects(cumlat, effects = "alcohol", categorical = TRUE, plot = FALSE))[[1]]
+pl_cum_2 <- plot(conditional_effects(cumlat, effects = "alcohol", method = "posterior_linpred", plot = FALSE))[[1]]
+pl_cum_3 <- plot(conditional_effects(cumlat, effects = "citric.acid", categorical = TRUE, plot = FALSE))[[1]]
+pl_cum_4 <- plot(conditional_effects(cumlat, effects = "citric.acid", method = "posterior_linpred", plot = FALSE))[[1]]
+```
+
+```{r}
+#| label: fig-cumres
+#| fig-cap: "Result for cumulative model (only for alcohol and citric.acid)"
+(pl_cum_2 + labs(y = TeX(r"(\tilde{y})")) + (pl_cum_1 + theme(legend.position = "none"))) / (pl_cum_4 + labs(y = TeX(r"(\tilde{y})")) + pl_cum_3 )
+```
+
+In linear regression, we implicitly assumed equidistant among each qualities by assuming that $quality$ is a metric variable. In cumulative model, we infer the distances by the threshold $\tau_c$. The posterior distribution of $\tau_c$ is shown in @fig-tau. It can be seen that the large part of posteriors for $\tau_3$ and $\tau_4$ overlaps, which implies lower $quality$ wine are more similar to each other in terms of $quality$. We also see larger 
+gap between the posterior for $\tau_6$ and $\tau_7$. This indicates that there is larger difference between \textit{average quality} wine ($y = 6$) and \textit{above average quality} wine ($y = 7$) \footnote{We use the term $average$ as general term other than arithmetic mean.}.
+
+```{r}
+#| label: fig-tau
+#| fig-cap: "Posterior distribution for the thresholds"
+cumlat_df <- as.data.frame(cumlat)
+cumlat_df %<>%
+  select("b_Intercept[1]", "b_Intercept[2]", "b_Intercept[3]", 
+        "b_Intercept[4]", "b_Intercept[5]","b_Intercept[6]") %>%
+  pivot_longer(everything())
+
+cumlat_df %>% ggplot(aes(x = value, fill=name)) +
+              geom_density(alpha=0.5) +
+              xlab(TeX(r"(\tau)")) +
+              scale_fill_manual(
+                       values = c("#7CAE00", "#00BE67", "#00BFC4", "#00A9FF", "#C77CFF", "#FF61CC"),
+                       name="threshold",
+                       breaks=c("b_Intercept[1]", "b_Intercept[2]", "b_Intercept[3]", 
+                                "b_Intercept[4]", "b_Intercept[5]","b_Intercept[6]"),
+                       labels=unname(TeX(c(r"(\tau_3)", r"(\tau_4)", r"(\tau_5)",
+                                           r"(\tau_6)", r"(\tau_7)",r"(\tau_8)"))))
+```
+
+
+## Model Comparison
+
+### ELPD-LOO
+
+We conduct model comparison using ELPD-LOO [@vehtari2017practical]. It approximate the expected value of predictive density for each observation. Especially, the ELPD-LOO estimate the quantity
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+elpd_{loo} &= \sum_{i=1}^{n}\log p(y_i | y_{-i}) \\
+&= \sum_{i=1}^{n}\log\int p(y_i | \theta) p(\theta | y_{-i})d\theta
+\end{aligned}
+\end{math}
+\end{center}
+
+where $y_{-i} = y \backslash y_i$ and $\theta$ is a vector containing all the parameters.
+Note that we will not be able to approximate the integral directly with MCMC samples at hand since we do not have samples from $p(\theta | y_{-i})$ but instead we only have posterior samples $\theta^{(s)} \sim p(\theta | y)$. Hence, importance sampling is used to approximate the calculation. Then we can approximate $P(y_i | y_{-i})$ as
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+p(y_i | y_{-i}) &= \int p(y_i | \theta) p(\theta | y_{-i})d\theta \\
+&= \int p(y_i | \theta) \frac{p(\theta| y_{-i})}{p(\theta | y)} p(\theta | y) d\theta \\
+&:= \int p(y_i | \theta) r_i p(\theta | y) d\theta \\
+&\approx \frac{1}{S} \sum_{s=1}^{S} p(y_i | \theta^{(s)}) r_i^{(s)}
+\end{aligned}
+\end{math}
+\end{center}
+
+where $S$ is the number of MCMC samples. Using Bayes theorem and assuming the factorisation of likelihood, the importance ratio $r_i^{(s)}$ can be expressed as
+
+$$
+r_i^{(s)} \propto \frac{\prod_{j \in J, j \neq i } p(y_j | \theta^{(s)}) p(\theta^{(s)})}
+{\prod_{j \in J} p(y_j | \theta^{(s)}) p(\theta^{(s)})} = \frac{1}{p(y_i | \theta^{(s)})}
+$$
+
+where $J = \{1,...,n\}$. Note that $r_i^{(s)}$ tends to take extreme value, which is stabilised by applying Pareto smoothing. This gives an estimation of $P(y_i | y_{-i})$ \footnote{Normalising term for $r_i^{(s)}$ is $\frac{1}{S}\sum_{s=1}^{S} r_i^{(s)}$}  and subsequently for $elpd_{loo}$.
+
+### Result
+
+Since we modeled the response $quality$ as continuous (metric) variable for linear regression, and discrete (ordinal) variable for cumulative model, we get posterior predictive density and posterior predictive probabilities respectively, which is not comparable directly in general [@Vehtari_cv]. However, when response variable is an integer counts, density can be interpreted as approximate probability value and hence direct comparison is possible [@Vehtari_case_study]. This apply to our response variable $quality$ and therefore we compare ELPD-LOO directly as follow.
+
+```{r echo = TRUE, comment = ""}
+loo_compare(linear_reg, cumlat)
+```
+
+It can be seen that cumulative model takes larger ELPD-LOO by 37.8 or around 3.8 times of its standard error, which indicates that cumulative model perform better in terms of posterior predictive performance. This could be due to the choice of discrete model which is consistent with the response variable, or non-equidistant among categories modelled by the threshold $\tau_c$. 
+
+### Posterior predictive check
+
+Additionally, we perform a posterior predictive check to evaluate the fit of our models. This involves the generation of simulated datasets $y^{rep}$ derived from posterior samples. These simulated datasets are then used to inspect the model fit, specifically by checking the consistency between $y^{rep}$ and the observed data $y$. The result is shown in @fig-pp1. We simulated $10$ new datasets for each models. It can be seen obviously that linear regression does not fit observed data due to the choice of continuous model; it have density for value like $5.5$ which will never occur in observed data, and it underestimate the density for observed values which is integer. For cumulative model, the fit looks much better although density tends to be overestimated for $y=6$ and underestimated for $y=5$.
+
+```{r message = FALSE}
+#| label: fig-pp1
+#| fig-cap: "Density of $y$ and 10 simulated datasets"
+pp_check(linear_reg) + labs(title = "Linear regression") + pp_check(cumlat, type =  c("bars")) + labs(title = "Cumulative model")
+```
+
+From these results, we continue further analysis with cumulative model.
+
+## Adding nonlinearity with spline
+
+We further try to improve our cumulative model by adding non-linearity. Intuitively, it is natural that there is non-linear relationship between physicochemical variables and the response variable. For example, too much $alcohol$ or too much sweetness would lead bad tasting and lower $quality$. Therefore, we expect there exist some \textit{optimal value} which maximizes the $quality$ of wine and if the \textit{optimal value} exist within the data range observed, we would want to model the non-linear relationship. For computational reason, we add non-linearity to the two variables *residual.sugar* and *total.sulfur.dioxide*. The posterior distributions of coefficients for these variable from our previous models are shown in @fig-post-small. It can be seen that posterior distribution concentrate close to zero. Although this might be due to the scale or simply small effect of variables, we suspect this might be due to non-linearity.
+
+```{r include = FALSE}
+pl_zero_1 <- mcmc_areas(linear_reg, pars = c("b_residual.sugar", "b_total.sulfur.dioxide"))
+pl_zero_2 <- mcmc_areas(cumlat, pars = c("b_residual.sugar", "b_total.sulfur.dioxide")) +
+            theme(axis.text.y = element_blank())
+```
+
+```{r}
+#| label: fig-post-small
+#| fig-cap: "Posterior distribution of *b_residual.sugar* and *b_total.sulfur.dioxide*."
+pl_zero_1 + labs(title = "Linear Regression") + pl_zero_2 + labs(title = "Cumulative model")
+```
+
+### Spline
+
+We add non-linearity with spline. The basic idea of spline is to approximate non-linear function with linear combination of basis functions. The discussion here will be based on [@gam] and [@pedersen2019hierarchical].
+
+In univariate case for simplicity, spline model can be expressed as
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+y_i &= f(x_i) + \epsilon_i \\
+&\approx \sum_{k=1}^{K}\beta_k B_k(x_i) + \epsilon_i \\
+y &=  B\beta + \epsilon
+\end{aligned}
+\end{math}
+\end{center}
+
+where $B_k(x_{i})$ is a basis function, $\beta_k$ is a weight for each basis, and $K$ is the number of basis. The third line gives matrix representation with $B_{(i,k)} =  B_k(x_i)$ and $\beta = [\beta_1, ..., \beta_k]^T$.
+In general, fitting this model directly would give too wiggly approximation of function and lead to overfitting. Hence, one need to penalise for the wiggliness. In frequentist spline, this can be done by minimising following objective function
+
+$$
+\hat{\beta} = \text{argmin}_{\beta} ( \lVert y - B\beta \rVert^2 + \lambda \beta^T S \beta)
+$$
+where $S$ is a measurement of wiggliness and $\lambda$ is a (hyper) parameter controlling the strength of penalisation. It turns out that this model can be expressed as a Bayesian multilevel model
+
+\begin{center}
+\begin{math}
+\begin{aligned}
+y &= \Theta a + \Psi b + \epsilon \\
+a &\sim \text{normal}(0, \sigma_a I) \\
+\sigma_a &\sim p(\sigma_a) \\
+b &\sim \prod_{m} p(b_m)
+\end{aligned}
+\end{math}
+\end{center}
+
+where $\Theta = \Theta(B, S), \Psi = \Psi(B, S)$ are transformed basis and $a, b$ are corresponding coefficients. The term
+$\Theta a$ are penalised such that $a$ is partially pooled towards global mean zero through penalisation parameter $\sigma_a \in \mathbb{R}_{+}$, which is also learnt by data. On the contrary, the penalisation is not applied for the term $\Psi b$ such that we set independent priors.
+
+Cumulative model with spline term can be estimated using \textbf{brms} as follow
+
+```{r eval=FALSE, echo = TRUE}
+f_s <- quality ~ citric.acid + volatile.acidity + 
+       sulphates + chlorides + alcohol +
+       s(residual.sugar) + s(total.sulfur.dioxide)
+
+cumlat_s <- brm(f_s,
+            data = d,
+            family = cumulative("probit"),
+            prior = p_cumlat_s)
+```
+
+where `s()` construct the transformed basis using \textbf{mgcv} package [@gam]. \footnote{We used default values for construction of basis.}
+
+### Result
+
+The result for two variables with spline term is shown in @fig-spline. For $residual.sugar$, it can be seen that non-linearity is unclear given considerable amount of uncertainty, which implies that small linear coefficient can be simply due to small effect or its scale. On the other hand, we can see that there is concave-like relationship between $residual.sugar$ and $quality$ where around $100$ to $250 ~ mg/L$ of $residual.sugar$ leads to high $quality$ and as  the value goes further away from this range, $quality$ decreases.
+
+```{r include = FALSE}
+pl_cum_s_1 <- plot(conditional_effects(cumlat_s, effects = "residual.sugar", method = "posterior_linpred", plot = FALSE))[[1]]
+pl_cum_s_2 <- plot(conditional_effects(cumlat_s, effects = "total.sulfur.dioxide", method = "posterior_linpred", plot = FALSE))[[1]]
+```
+
+```{r}
+#| label: fig-spline
+#| fig-cap: "Conditional effect for cumulative model with spline (only variables with spline term)"
+pl_cum_s_1 + labs(y = TeX(r"(\tilde{y})")) + pl_cum_s_2 + labs(y = TeX(r"(\tilde{y})"))
+```
+
+Finally, we compare predictive performance of all three models using ELPD-LOO. The result is following. It can be seen that adding spline term improved the ELPD by $91.9$ around $6$ times of its standard error, which indicates that predictive performance improved notably.
+
+```{r warning=FALSE, message=FALSE, echo = TRUE, comment = ""}
+loo_compare(linear_reg, cumlat, cumlat_s)
+```
+
+## Conclusion
+
+In this report, we estimated three Bayesian models to predict $quality$ of wine using 7 physicochemical variables. Focusing on two variables, we found that positive effect of $alcohol$ and negative effect of $citric.acid$ although the latter effect is limited. 
+Evaluating predictive performance of model with the ELPD, it was shown that cumulative model with spline is the best performing. Comparing with linear regression model, this can be due to the choice of discrete model which is consistent with the response, or non-equidistant of categories modelled by the thresholds. Adding spline term also improved the model further, which indicates the non linear functional form between response and predictive variables. For further analysis, we could add non-linearity to more variables, and also consider synergy effect by adding interaction terms or using tensor product spline.
+
+## References {.unnumbered}
+
+:::{#refs}
+:::
+
+Code Repository: [https://github.com/1129hiki/abda_project](https://github.com/1129hiki/abda_project)
+
+## Appendix {.unnumbered}
+
+### A.1 Model diagnosis for selected parameters {.unnumbered}
+
+Trace plots for coefficients of $alcohol$ and $citric.acid$ in linear regression. 
+
+```{r}
+mcmc_trace(linear_reg, "b_alcohol") + labs(title = "alcohol")
+```
+
+```{r}
+mcmc_trace(linear_reg, "b_citric.acid") + labs(title = "citric.acid")
+```
+
+### A.2 Model summaries {.unnumbered}
+
+#### Linear Regression {.unnumbered}
+\tiny
+```{r message = FALSE, comment = "", width = 120}
+summary(linear_reg)
+```
+
+#### Cumulative model {.unnumbered}
+
+```{r, warning=FALSE, comment = "", width = 120}
+summary(cumlat)
+```
+
+#### Cumulative model with spline {.unnumbered}
+```{r, warning=FALSE, comment = "", width = 240}
+summary(cumlat_s)
+```
+
+### A.3 Prior summaries {.unnumbered}
+#### Linear Regression {.unnumbered}
+```{r message = FALSE, comment = "", width = 240}
+prior_summary(linear_reg)
+```
+
+#### Cumulative model {.unnumbered}
+```{r message = FALSE, comment = "", width = 120}
+prior_summary(cumlat)
+```
+
+#### Cumulative model with Spline {.unnumbered}
+```{r message = FALSE, comment = "", width = 120}
+prior_summary(cumlat_s)
+```
+
+
+
+
+

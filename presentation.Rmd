@@ -276,7 +276,7 @@ pl_lr_2 <- plot(conditional_effects(linear_reg, "citric.acid", method = "posteri
 ## Regression: Result
 
 ```{r}
-(pl_lr_1 + labs(title = "Expected value of y conditioned on x") + theme(plot.title = element_text(size = 15)) + pl_mcmc_1 + labs(title = "Posterior distribution") + theme(plot.title = element_text(size = 15))) / (pl_lr_2  + pl_mcmc_2)
+(pl_lr_1 + labs(title = "Conditional effect") + theme(plot.title = element_text(size = 15)) + pl_mcmc_1 + labs(title = "Posterior distribution") + theme(plot.title = element_text(size = 15))) / (pl_lr_2  + pl_mcmc_2)
 ```
 \scriptsize	
 Figure 4: Result for linear regression (only for "alcohol" and "citric.acid")
@@ -353,7 +353,7 @@ Figure 5: Result for cumulative model (only for "alcohol" and "citric.acid")
 
 ## Cumulative model: Non-equidistant
 
-Linear regression implicitly assume equidistant among categories (quality).
+Linear regression implicitly assumes equidistant among categories (quality).
 
 ```{r fig.width=7, fig.height=4}
 cumlat_df <- as.data.frame(cumlat)
@@ -370,8 +370,8 @@ cumlat_df %>% ggplot(aes(x = value, fill=name)) +
                        name="threshold",
                        breaks=c("b_Intercept[1]", "b_Intercept[2]", "b_Intercept[3]", 
                                 "b_Intercept[4]", "b_Intercept[5]","b_Intercept[6]"),
-                       labels=unname(TeX(c(r"(\tau_4)", r"(\tau_5)", r"(\tau_6)",
-                                           r"(\tau_7)", r"(\tau_8)",r"(\tau_9)"))))
+                       labels=unname(TeX(c(r"(\tau_3)", r"(\tau_4)", r"(\tau_5)",
+                                           r"(\tau_6)", r"(\tau_7)",r"(\tau_8)"))))
 ```
 
 \scriptsize
@@ -388,7 +388,7 @@ loo_compare(linear_reg, cumlat)
 \normalsize
 * Need to be carefully interpreted: 
   + We modelled $y$ differently.
-* Cumulative model has lower ELPD.
+* Cumulative model has higher ELPD.
   + We continue further analysis with cumulative model.
 
 <!-- Posterior Model Probability -->

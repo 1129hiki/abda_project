@@ -135,7 +135,7 @@ Firstly, we estimate linear regression model, which is arguably the simplest mod
 \end{math}
 \end{center}
 
-where $y_i$ is $quality$ and $x_i$ is a vector of predictive variables for wine $i$. We use Gaussian likelihood even though we could choose other likelihood such as $t$ distribution. One of our justification for the use of Gaussian likelihood is the central limit theorem which states that sum of large number of variables are approximately Gaussian. The $\beta_j$ is the coefficient of linear regression for each predictive variables. Hence we have $j = 1,...,8$ including intercept and $\beta = [\beta_1,...,\beta_8]^T$. The third line indicates the prior distribution for the coefficients, which we set separately for each coefficients so that we can incorporate difference in scale and/or informativeness into the priors.
+where $y_i$ is $quality$ and $x_i$ is a vector of predictive variables for wine $i$. We use Gaussian likelihood even though we could choose other likelihood such as $t$ distribution. One of our justification for the use of Gaussian likelihood is the central limit theorem which states that sum of large number of variables are approximately Gaussian. The $\beta_j$ is the coefficient of linear regression for each predictive variables. Hence, we have $j = 1,...,8$ including intercept and $\beta = [\beta_1,...,\beta_8]^T$. The third line indicates the prior distribution for the coefficients, which we set separately for each coefficients so that we can incorporate difference in scale and/or informativeness into the priors.
 
 Using \textbf{brms}, the model can be estimated by following code
 
@@ -237,7 +237,7 @@ Pr(y = c) &= Pr(y \leq c) - Pr(y \leq c - 1) \\
 \end{math}
 \end{center}
 
-In cumulative model, probabilities for each categories $c$ is defined as probability that latent variable $\tilde{y}$ takes the value between $\tau_{c - 1}$ and $\tau_c$ or $Pr(\tau_{c - 1} < \tilde{y}\leq \tau_c)$. We then model $\tilde{y}$ with the linear predictor $\eta$ which remains same as linear regression model, and noise term which we assume to be standard normal. This also defines the distribution of $\tilde{y}$ to be normal.
+In cumulative model, probabilities for each categories $c$ is defined as probability that latent variable $\tilde{y}$ takes the value between $\tau_{c - 1}$ and $\tau_c$ or $Pr(\tau_{c - 1} < \tilde{y}\leq \tau_c)$. We then model $\tilde{y}$ with the linear predictor $\eta$ which remains same as linear regression model except that intercept is not included, and noise term which we assume to be standard normal. This also defines the distribution of $\tilde{y}$ to be normal.
 
 We can also express $Pr(\tilde{y} \leq \tau_c)$ as
 
@@ -280,11 +280,9 @@ cumlat <- brm(f,
 ```
 \normalsize
 
-We specify cumulative model with `family = cumulative()` with link function `"probit"` which corresponds to normal likelihood for $\tilde{y}$.
+We specify cumulative model with `family = cumulative()` with link function `"probit"` which corresponds to normal likelihood for $\tilde{y}$. We set prior in a same way as linear regression assuming the simplest model where linear predictor $\eta$ does not exist and hence $SD(\tilde{y}) = 1$.
 
-We set prior in a same way as linear regression assuming the simplest model where linear predictor $\eta$ does not exist and hence $SD(\tilde{y}) = 1$. As discussed in [@ordinal_paul], assuming ordinal variable as a metric variable (as in liner regression) would cause problems such as distortion in size of coefficients. Hence we expect cumulative model to perform better, which we will evaluate in further analysis later.
-
-Note that we could also consider category specific effect where effect of predictive variables differs across categories (e.g. $alcohol$ being important factor for lower $quality$ but not for higher $quality$). However, we do not take this approach for our analysis given small number of data for some of the categories (especially for $quality = 3, 9$).
+As discussed in [@ordinal_paul], assuming ordinal variable as a metric variable (as in liner regression) would cause problems such as distortion in size of coefficients. Hence, we expect cumulative model to perform better, which we will evaluate in further analysis later. Note that we could also consider category specific effect where effect of predictive variables differs across categories (e.g. $alcohol$ being important factor for lower $quality$ but not for higher $quality$). However, we do not take this approach for our analysis given small number of data for some of the categories (especially for $quality = 3, 9$).
 
 ### Sampling strategy for thresholds
 
@@ -293,7 +291,7 @@ By the construction of cumulative model, we have constraint on the thresholds
 $$
 \tau_1 < \tau_2 < \dots < \tau_{C-1}.
 $$
-If this does not hold, we get negative probability $Pr(y = c) < 0$. This can be avoided by introducing unconstrained thresholds $\tilde{\tau}_c$, and define the (constrained) thresholds as
+If this does not hold, we get negative probability $Pr(y = c) < 0$. This can be avoided by introducing unconstrained thresholds $\tilde{\tau}_c$, and define the (order constrained) thresholds as
 
 
 \begin{center}
@@ -374,8 +372,8 @@ elpd_{loo} &= \sum_{i=1}^{n}\log p(y_i | y_{-i}) \\
 \end{math}
 \end{center}
 
-where $y_{-i} = y \backslash y_i$ and $\theta$ is a vector containing all the parameters.
-Note that we will not be able to approximate the integral directly with MCMC samples at hand since we do not have samples from $p(\theta | y_{-i})$ but instead we only have posterior samples $\theta^{(s)} \sim p(\theta | y)$. Hence, importance sampling is used to approximate the calculation. Then we can approximate $P(y_i | y_{-i})$ as
+where $y_{-i} = y \backslash y_i$ and $\theta$ is a vector containing all the parameters \footnote{We omit dependence on $x_i$ from the expression to reduce clutter.}.
+Note that we will not be able to approximate the integral directly with MCMC samples at hand since we do not have samples from $p(\theta | y_{-i})$ but instead we only have posterior samples $\theta^{(s)} \sim p(\theta | y)$ with size $S$. Hence, importance sampling is used to approximate the calculation. We can approximate $P(y_i | y_{-i})$ as
 
 \begin{center}
 \begin{math}
@@ -388,7 +386,7 @@ p(y_i | y_{-i}) &= \int p(y_i | \theta) p(\theta | y_{-i})d\theta \\
 \end{math}
 \end{center}
 
-where $S$ is the number of MCMC samples. Using Bayes theorem and assuming the factorisation of likelihood, the importance ratio $r_i^{(s)}$ can be expressed as
+Using Bayes theorem and assuming the factorisation of likelihood, the importance ratio $r_i^{(s)}$ can be expressed as
 
 $$
 r_i^{(s)} \propto \frac{\prod_{j \in J, j \neq i } p(y_j | \theta^{(s)}) p(\theta^{(s)})}
@@ -409,7 +407,7 @@ It can be seen that cumulative model takes larger ELPD-LOO by 37.8 or around 3.8
 
 ### Posterior predictive check
 
-Additionally, we perform a posterior predictive check to evaluate the fit of our models. This involves the generation of simulated datasets $y^{rep}$ derived from posterior samples. These simulated datasets are then used to inspect the model fit, specifically by checking the consistency between $y^{rep}$ and the observed data $y$. The result is shown in @fig-pp1. We simulated $10$ new datasets for each models. It can be seen obviously that linear regression does not fit observed data due to the choice of continuous model; it have density for value like $5.5$ which will never occur in observed data, and it underestimate the density for observed values which is integer. For cumulative model, the fit looks much better although density tends to be overestimated for $y=6$ and underestimated for $y=5$.
+Additionally, we perform a posterior predictive check to evaluate the fit of our models. This involves the generation of simulated datasets $y^{rep}$ derived from posterior samples. These simulated datasets are then used to inspect the model fit, specifically by checking the consistency between $y^{rep}$ and the observed data $y$. The result is shown in @fig-pp1. We simulated $10$ new datasets for each models. It can be seen obviously that linear regression does not fit observed data due to the choice of continuous model; it has density for value like $5.5$ which will never occur in observed data, and it underestimate the density for observed values which is integer. For cumulative model, the fit looks much better although density tends to be slightly overestimated for $y=6$.
 
 ```{r message = FALSE}
 #| label: fig-pp1
@@ -452,12 +450,13 @@ y &=  B\beta + \epsilon
 \end{center}
 
 where $B_k(x_{i})$ is a basis function, $\beta_k$ is a weight for each basis, and $K$ is the number of basis. The third line gives matrix representation with $B_{(i,k)} =  B_k(x_i)$ and $\beta = [\beta_1, ..., \beta_k]^T$.
-In general, fitting this model directly would give too wiggly approximation of function and lead to overfitting. Hence, one need to penalise for the wiggliness. In frequentist spline, this can be done by minimising following objective function
+In general, fitting this model directly would give too wiggly approximation of function and lead to overfitting. Hence, one needs to penalise for the wiggliness. In frequentist spline, this can be done by minimising following objective function
 
 $$
-\hat{\beta} = \text{argmin}_{\beta} ( \lVert y - B\beta \rVert^2 + \lambda \beta^T S \beta)
+\hat{\beta} = \text{argmin}_{\beta} ( \lVert y - B\beta \rVert^2 + \lambda \beta^T W \beta)
 $$
-where $S$ is a measurement of wiggliness and $\lambda$ is a (hyper) parameter controlling the strength of penalisation. It turns out that this model can be expressed as a Bayesian multilevel model
+where $W$ is a measurement of wiggliness and $\lambda$ is a (hyper) parameter controlling the strength of penalisation. 
+It turns out that this model can be equivalently expressed as a Bayesian multilevel model
 
 \begin{center}
 \begin{math}
@@ -470,8 +469,8 @@ b &\sim \prod_{m} p(b_m)
 \end{math}
 \end{center}
 
-where $\Theta = \Theta(B, S), \Psi = \Psi(B, S)$ are transformed basis and $a, b$ are corresponding coefficients. The term
-$\Theta a$ are penalised such that $a$ is partially pooled towards global mean zero through penalisation parameter $\sigma_a \in \mathbb{R}_{+}$, which is also learnt by data. On the contrary, the penalisation is not applied for the term $\Psi b$ such that we set independent priors.
+where $\Theta = \Theta(B, W), \Psi = \Psi(B, W)$ are transformed basis and $a, b$ are corresponding coefficients. The term
+$\Theta a$ are penalised such that $a$ is partially pooled towards global mean zero through penalisation parameter $\sigma_a >0$, which is also learnt by data. On the contrary, the penalisation is not applied for the term $\Psi b$ such that we set independent priors.
 
 Cumulative model with spline term can be estimated using \textbf{brms} as follow
 

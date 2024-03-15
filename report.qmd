@@ -35,6 +35,7 @@ library(bayesplot)
 library(brms)
 library(patchwork)
 library(latex2exp)
+set.seed(2)
 ```
 
 ```{r include = FALSE}
@@ -66,7 +67,7 @@ In this report, we construct Bayesian predictive model for quality of white wine
 
 ## Data
 
-The data is obtained from [@misc_wine_quality_186]. It contains the quality of red and white wines which takes values from 1, 2 up to 10 (10 is the best quality), of which we only focus on the data for wine wines for this report (4898 observations). The histogram of quality is shown in @fig-res. It can be seen that mass concentrate in $5$ and $6$, and none of the wine receives the quality $1$, $2$ nor $10$. 
+The data is obtained from [@misc_wine_quality_186]. It contains the quality of red and white wines which takes values from 1, 2 up to 10 (10 is the best quality), of which we only focus on the data for white wines for this report (4898 observations). The histogram of quality is shown in @fig-res. It can be seen that mass concentrate in $5$ and $6$, and none of the wine receives the quality $1$, $2$ nor $10$. 
 
 ```{r fig.width=3, fig.height = 2}
 #| label: fig-res
